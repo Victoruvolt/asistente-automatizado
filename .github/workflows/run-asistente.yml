@@ -1,0 +1,44 @@
+name: Ejecutar Asistente Automatizado
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  run-asistente:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Clonar el repositorio
+    - name: Clonar el repositorio
+      uses: actions/checkout@v3
+
+    # 2. Configurar Python
+    - name: Configurar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    # 3. Instalar dependencias
+    - name: Instalar dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 4. Crear archivo .env
+    - name: Configurar variables de entorno
+      run: |
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+        echo "BILLAGE_API_KEY=${{ secrets.BILLAGE_API_KEY }}" >> .env
+        echo "IMAP_SERVER=${{ secrets.IMAP_SERVER }}" >> .env
+        echo "IMAP_USER=${{ secrets.IMAP_USER }}" >> .env
+        echo "IMAP_PASSWORD=${{ secrets.IMAP_PASSWORD }}" >> .env
+        echo "TWILIO_WHATSAPP_NUMBER=${{ secrets.TWILIO_WHATSAPP_NUMBER }}" >> .env
+        echo "TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}" >> .env
+        echo "TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}" >> .env
+
+    # 5. Ejecutar el asistente
+    - name: Ejecutar el servidor Flask
+      run: python app.py
