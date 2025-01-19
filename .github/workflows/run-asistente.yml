@@ -27,18 +27,23 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # 4. Crear archivo .env
-    - name: Configurar variables de entorno
+    # 4. Configurar ngrok y Flask
+    - name: Iniciar ngrok y Flask
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        BILLAGE_API_KEY: ${{ secrets.BILLAGE_API_KEY }}
+        IMAP_SERVER: ${{ secrets.IMAP_SERVER }}
+        IMAP_USER: ${{ secrets.IMAP_USER }}
+        IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+        TWILIO_WHATSAPP_NUMBER: ${{ secrets.TWILIO_WHATSAPP_NUMBER }}
+        TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+        TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
       run: |
-        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
-        echo "BILLAGE_API_KEY=${{ secrets.BILLAGE_API_KEY }}" >> .env
-        echo "IMAP_SERVER=${{ secrets.IMAP_SERVER }}" >> .env
-        echo "IMAP_USER=${{ secrets.IMAP_USER }}" >> .env
-        echo "IMAP_PASSWORD=${{ secrets.IMAP_PASSWORD }}" >> .env
-        echo "TWILIO_WHATSAPP_NUMBER=${{ secrets.TWILIO_WHATSAPP_NUMBER }}" >> .env
-        echo "TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}" >> .env
-        echo "TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}" >> .env
-
-    # 5. Ejecutar el asistente
-    - name: Ejecutar el servidor Flask
-      run: python app.py
+        curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+        echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null
+        sudo apt update
+        sudo apt install ngrok
+        ngrok authtoken $NGROK_AUTH_TOKEN
+        nohup ngrok http 5000 &  # Iniciar ngrok en segundo plano
+        python app.py
