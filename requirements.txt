@@ -1,4 +1,9 @@
-Flask
-cryptography
+flask
 twilio
+google-api-python-client
+google-auth
+google-cloud-speech
+openai
+python-dotenv
 requests
+
