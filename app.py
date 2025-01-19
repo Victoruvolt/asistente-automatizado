@@ -1,97 +1,68 @@
-import os
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
-from googleapiclient.discovery import build
-from google.oauth2.service_account import Credentials
-from google.cloud import speech_v1p1beta1 as speech
 from PyPDF2 import PdfReader
-from dotenv import load_dotenv
+import os
 import openai
 import requests
+from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
-
-# Variables de entorno necesarias
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-BILLAGE_API_KEY = os.getenv("BILLAGE_API_KEY")
-IMAP_SERVER = os.getenv("IMAP_SERVER")
-IMAP_USER = os.getenv("IMAP_USER")
-IMAP_PASSWORD = os.getenv("IMAP_PASSWORD")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-NGROK_URL = os.getenv("NGROK_URL")
-
-# Configurar OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Inicializar Flask
 app = Flask(__name__)
 
-# Rutas y lógica del asistente
 @app.route("/webhook", methods=["POST"])
 def whatsapp_webhook():
-    """Manejar mensajes de WhatsApp."""
+    """Manejar mensajes y archivos recibidos de WhatsApp."""
+    incoming_msg = request.form.get("Body")
+    media_url = request.form.get("MediaUrl0")
+    media_type = request.form.get("MediaContentType0")
+    response = MessagingResponse()
+    message = response.message()
+
     try:
-        body = request.form.get("Body")
-        media_url = request.form.get("MediaUrl0")
-        from_number = request.form.get("From")
+        if media_url and media_type == "application/pdf":
+            # Descargar y procesar el PDF
+            pdf_response = requests.get(media_url)
+            pdf_path = "/tmp/archivo_recibido.pdf"
+            with open(pdf_path, "wb") as f:
+                f.write(pdf_response.content)
 
-        response_text = ""
+            reader = PdfReader(pdf_path)
+            contenido_pdf = ""
+            for page in reader.pages:
+                contenido_pdf += page.extract_text()
 
-        # Si hay un archivo de audio
-        if media_url:
+            # Usar OpenAI para analizar el PDF
+            completion = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": contenido_pdf}],
+            )
+            respuesta = completion.choices[0].message.content
+            message.body(f"Resumen del PDF: {respuesta}")
+        elif media_url and media_type.startswith("audio/"):
+            # Descargar y transcribir el audio
             audio_response = requests.get(media_url)
-            audio_file_path = "/tmp/audio.ogg"
-
-            with open(audio_file_path, "wb") as f:
+            audio_path = "/tmp/audio_recibido.mp3"
+            with open(audio_path, "wb") as f:
                 f.write(audio_response.content)
 
-            response_text = transcribir_audio(audio_file_path)
-        elif body:
-            response_text = procesar_mensaje_texto(body)
+            audio_file = open(audio_path, "rb")
+            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            message.body(f"Transcripción del audio: {transcript['text']}")
         else:
-            response_text = "Lo siento, no entendí tu mensaje."
-
-        # Responder al usuario
-        twilio_response = MessagingResponse()
-        twilio_response.message(response_text)
-        return str(twilio_response)
-
+            # Procesar texto entrante
+            completion = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": incoming_msg}],
+            )
+            respuesta = completion.choices[0].message.content
+            message.body(respuesta)
     except Exception as e:
-        return f"Error procesando la solicitud: {str(e)}", 500
-
-def procesar_mensaje_texto(mensaje):
-    """Procesar mensajes de texto y generar respuestas con OpenAI."""
-    try:
-        completions = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": mensaje}],
-        )
-        return completions.choices[0].message.content
-    except Exception as e:
-        return f"Error al procesar el mensaje: {str(e)}"
-
-def transcribir_audio(archivo_audio):
-    """Transcribir un archivo de audio usando Google Cloud Speech-to-Text."""
-    client = speech.SpeechClient()
-
-    with open(archivo_audio, "rb") as audio_file:
-        audio_content = audio_file.read()
-
-    audio = speech.RecognitionAudio(content=audio_content)
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.OGG_OPUS,
-        sample_rate_hertz=16000,
-        language_code="es-ES",
-    )
-
-    response = client.recognize(config=config, audio=audio)
-    for result in response.results:
-        return result.alternatives[0].transcript
-
-    return "No se pudo transcribir el audio."
+        message.body(f"Error procesando la solicitud: {e}")
+    return str(response)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(debug=True)

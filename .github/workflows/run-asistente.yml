@@ -26,14 +26,13 @@ jobs:
       - name: Verificar secretos
         run: |
           echo "Verificando claves..."
-          test -n "$OPENAI_API_KEY" || exit 1
-          test -n "$TWILIO_AUTH_TOKEN" || exit 1
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then exit 1; fi
+          if [ -z "${{ secrets.NGROK_AUTH_TOKEN }}" ]; then exit 1; fi
+          if [ -z "${{ secrets.TWILIO_ACCOUNT_SID }}" ]; then exit 1; fi
+          if [ -z "${{ secrets.TWILIO_AUTH_TOKEN }}" ]; then exit 1; fi
 
       - name: Instalar y configurar ngrok
         run: |
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null
-          sudo apt update && sudo apt install ngrok
           ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
           nohup ngrok http 5000 &
 
@@ -47,10 +46,8 @@ jobs:
       - name: Configurar variables de entorno
         run: |
           echo "Configurando archivo .env con las variables necesarias..."
-          echo "OPENAI_API_KEY=$OPENAI_API_KEY" > .env
-          echo "TWILIO_AUTH_TOKEN=$TWILIO_AUTH_TOKEN" >> .env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
           echo "NGROK_URL=$NGROK_URL" >> .env
-          echo "Archivo .env configurado exitosamente."
 
       - name: Ejecutar Flask
         run: python app.py
