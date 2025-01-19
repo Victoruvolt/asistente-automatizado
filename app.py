@@ -1,38 +1,54 @@
 import os
 import openai
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from twilio.twiml.messaging_response import MessagingResponse
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-# Cargar variables de entorno
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
+# Cargar las variables del entorno
+load_dotenv()
 
+# Configurar OpenAI
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Inicializar Flask
 app = Flask(__name__)
 
 @app.route("/webhook", methods=["POST"])
 def whatsapp_webhook():
-    """Webhook para manejar mensajes de WhatsApp."""
-    body = request.form.get("Body")  # Mensaje recibido
-    response = MessagingResponse()
-
+    """Procesa los mensajes entrantes desde WhatsApp."""
     try:
-        # Llamar al modelo GPT con la nueva API
-        completion = openai.ChatCompletion.create(
+        # Obtener el mensaje de WhatsApp
+        mensaje = request.form.get("Body")
+        numero_remitente = request.form.get("From")
+
+        # Log del mensaje recibido
+        print(f"Mensaje recibido de {numero_remitente}: {mensaje}")
+
+        # Generar respuesta usando la nueva API de OpenAI
+        respuesta_openai = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Eres un asistente de trabajo."},
-                {"role": "user", "content": body}
-            ]
+                {"role": "system", "content": "Eres un asistente automatizado que organiza calendarios y responde solicitudes."},
+                {"role": "user", "content": mensaje},
+            ],
+            temperature=0.7
         )
-        respuesta_gpt = completion['choices'][0]['message']['content']
-        response.message(f"Asistente: {respuesta_gpt}")
+
+        # Extraer la respuesta de OpenAI
+        respuesta_texto = respuesta_openai["choices"][0]["message"]["content"]
+        print(f"Respuesta generada por OpenAI: {respuesta_texto}")
+
+        # Crear una respuesta para Twilio
+        respuesta = MessagingResponse()
+        respuesta.message(respuesta_texto)
+        return str(respuesta)
+
     except Exception as e:
-        response.message(f"Error procesando la solicitud: {str(e)}")
-    
-    return str(response)
+        print(f"Error procesando la solicitud: {str(e)}")
+        respuesta = MessagingResponse()
+        respuesta.message(f"Error procesando la solicitud: {str(e)}")
+        return str(respuesta), 500
+
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True)
