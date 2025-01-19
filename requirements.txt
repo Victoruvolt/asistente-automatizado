@@ -1,10 +1,10 @@
-flask
+Flask
 twilio
+PyPDF2
 google-api-python-client
 google-auth
-google-cloud-speech
-openai
 python-dotenv
+openai
+SpeechRecognition
+pydub
 requests
-PyPDF2
-
