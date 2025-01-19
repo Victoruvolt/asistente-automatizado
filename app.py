@@ -1,68 +1,87 @@
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
-from PyPDF2 import PdfReader
 import os
+from flask import Flask, request, jsonify
+from twilio.rest import Client
+from PyPDF2 import PdfReader
+from google.cloud import speech
 import openai
 import requests
-from dotenv import load_dotenv
 
-# Cargar variables de entorno
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
-
+# Inicialización de la app Flask
 app = Flask(__name__)
 
-@app.route("/webhook", methods=["POST"])
-def whatsapp_webhook():
-    """Manejar mensajes y archivos recibidos de WhatsApp."""
-    incoming_msg = request.form.get("Body")
-    media_url = request.form.get("MediaUrl0")
-    media_type = request.form.get("MediaContentType0")
-    response = MessagingResponse()
-    message = response.message()
+# Cargar variables de entorno
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+BILLAGE_API_KEY = os.getenv("BILLAGE_API_KEY")
+IMAP_SERVER = os.getenv("IMAP_SERVER")
+IMAP_USER = os.getenv("IMAP_USER")
+IMAP_PASSWORD = os.getenv("IMAP_PASSWORD")
+NGROK_URL = os.getenv("NGROK_URL")
 
+# Inicializar clientes
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+openai.api_key = OPENAI_API_KEY
+
+# Función para enviar mensajes de WhatsApp
+def enviar_mensaje_whatsapp(destinatario, mensaje):
     try:
-        if media_url and media_type == "application/pdf":
-            # Descargar y procesar el PDF
-            pdf_response = requests.get(media_url)
-            pdf_path = "/tmp/archivo_recibido.pdf"
-            with open(pdf_path, "wb") as f:
-                f.write(pdf_response.content)
-
-            reader = PdfReader(pdf_path)
-            contenido_pdf = ""
-            for page in reader.pages:
-                contenido_pdf += page.extract_text()
-
-            # Usar OpenAI para analizar el PDF
-            completion = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": contenido_pdf}],
-            )
-            respuesta = completion.choices[0].message.content
-            message.body(f"Resumen del PDF: {respuesta}")
-        elif media_url and media_type.startswith("audio/"):
-            # Descargar y transcribir el audio
-            audio_response = requests.get(media_url)
-            audio_path = "/tmp/audio_recibido.mp3"
-            with open(audio_path, "wb") as f:
-                f.write(audio_response.content)
-
-            audio_file = open(audio_path, "rb")
-            transcript = openai.Audio.transcribe("whisper-1", audio_file)
-            message.body(f"Transcripción del audio: {transcript['text']}")
-        else:
-            # Procesar texto entrante
-            completion = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": incoming_msg}],
-            )
-            respuesta = completion.choices[0].message.content
-            message.body(respuesta)
+        message = twilio_client.messages.create(
+            from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+            to=f"whatsapp:{destinatario}",
+            body=mensaje
+        )
+        print(f"Mensaje enviado: SID {message.sid}")
     except Exception as e:
-        message.body(f"Error procesando la solicitud: {e}")
-    return str(response)
+        print(f"Error enviando mensaje de WhatsApp: {str(e)}")
 
+# Procesar PDF
+def leer_pdf(ruta_pdf):
+    try:
+        reader = PdfReader(ruta_pdf)
+        texto = "".join(page.extract_text() for page in reader.pages)
+        return texto
+    except Exception as e:
+        return f"Error al leer el PDF: {str(e)}"
+
+# Procesar audio
+def procesar_audio(ruta_audio):
+    client = speech.SpeechClient()
+    with open(ruta_audio, "rb") as audio_file:
+        audio_content = audio_file.read()
+    audio = speech.RecognitionAudio(content=audio_content)
+    config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=16000,
+        language_code="es-ES"
+    )
+    response = client.recognize(config=config, audio=audio)
+    return " ".join(result.alternatives[0].transcript for result in response.results)
+
+# Webhook de WhatsApp
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    try:
+        body = request.values.get("Body", "").lower()
+        from_number = request.values.get("From", "")
+        if "pdf" in body:
+            respuesta = "Por favor envía un archivo PDF y lo procesaremos."
+        elif "audio" in body:
+            respuesta = "Por favor envía un archivo de audio y lo transcribiremos."
+        else:
+            respuesta = "No entendí tu mensaje. Intenta con 'pdf' o 'audio'."
+        enviar_mensaje_whatsapp(from_number, respuesta)
+        return "Mensaje recibido", 200
+    except Exception as e:
+        print(f"Error en el webhook: {str(e)}")
+        return "Error procesando solicitud", 500
+
+# Ruta de prueba
+@app.route("/prueba", methods=["GET"])
+def prueba():
+    return jsonify({"status": "Asistente funcionando correctamente."})
+
+# Inicio del servidor
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)

@@ -1,6 +1,7 @@
 flask
 twilio
 pypdf2
+google-cloud-speech
+openai
 requests
 python-dotenv
-openai
