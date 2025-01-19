@@ -6,4 +6,5 @@ google-cloud-speech
 openai
 python-dotenv
 requests
+PyPDF2
 
