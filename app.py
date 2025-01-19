@@ -26,10 +26,13 @@ app = Flask(__name__)
 
 # Configurar Google Calendar
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-calendar_service = build('calendar', 'v3', credentials=credentials)
+try:
+    credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    calendar_service = build('calendar', 'v3', credentials=credentials)
+except Exception as e:
+    raise Exception(f"Error al configurar Google Calendar: {e}")
 
-# Cargar el convenio del metal
+# Función para cargar el convenio del metal
 def cargar_convenio(file_path):
     try:
         reader = PdfReader(file_path)
@@ -38,11 +41,15 @@ def cargar_convenio(file_path):
             texto_completo += page.extract_text()
         return texto_completo
     except Exception as e:
-        raise Exception(f"Error al cargar el convenio: {e}")
+        print(f"Error al cargar el convenio: {e}")
+        return None
 
+# Cargar el texto del Convenio
 CONVENIO_METAL = cargar_convenio("convenio_metal_2023.pdf")
+if not CONVENIO_METAL:
+    print("Advertencia: No se pudo cargar el convenio. Verifica el archivo.")
 
-# Bases de datos técnicas ampliadas
+# Bases de datos técnicas
 NORMATIVA = {
     "sección de cable": "La sección mínima para una instalación doméstica es de 1.5 mm² para alumbrado y 2.5 mm² para enchufes según el REBT.",
     "protección diferencial": "El diferencial debe ser de 30mA para instalaciones domésticas.",
@@ -72,12 +79,6 @@ COCHES_ELECTRICOS = {
     "volkswagen id.4": "Batería de 77 kWh, autonomía de 520 km."
 }
 
-PERMISOS_LABORALES = {
-    "permiso retribuido": "Incluye matrimonio (15 días), nacimiento de hijo/a (2 días) y fallecimiento de familiares (2-4 días).",
-    "vacaciones": "El convenio establece un mínimo de 30 días naturales por año trabajado.",
-    "horas extra": "Las horas extraordinarias se deben compensar con tiempo libre o un 75% más de salario."
-}
-
 # Funciones de respuesta
 def responder_tecnico(pregunta):
     for clave, respuesta in NORMATIVA.items():
@@ -91,12 +92,6 @@ def responder_movilidad(pregunta):
             return respuesta
     return "No tengo información sobre ese cargador o coche. Por favor, revisa las especificaciones."
 
-def responder_convenio(pregunta):
-    for clave, respuesta in PERMISOS_LABORALES.items():
-        if clave in pregunta.lower():
-            return respuesta
-    return "Consulta el convenio del metal para más información."
-
 # Webhook principal
 @app.route("/webhook", methods=["POST"])
 def whatsapp_webhook():
@@ -107,7 +102,7 @@ def whatsapp_webhook():
 
         # Consultar el convenio
         if "convenio" in incoming_msg.lower():
-            respuesta = responder_convenio(incoming_msg)
+            respuesta = "Consulta general del convenio del metal: derechos laborales y permisos retribuidos."
             message.body(f"📜 {respuesta}")
             return str(response)
 
