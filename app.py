@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import os
 from flask import Flask, request, jsonify
 from twilio.rest import Client
@@ -84,3 +85,43 @@ def prueba():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
+=======
+from flask import Flask, request, jsonify
+from utils.whatsapp import send_whatsapp_message, process_whatsapp_message
+from utils.pdf_processing import read_pdf
+from utils.calendar import create_event, list_events
+from utils.email_manager import send_email, read_email
+from utils.normativa import get_laboral_guidelines
+from utils.mobility import recommend_chargers, vehicle_info
+import os
+
+app = Flask(__name__)
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    try:
+        data = request.json
+        message = data.get("Body", "").strip().lower()
+
+        if "pdf" in message:
+            response = read_pdf("example.pdf")  # Cambia esto con la ruta del PDF
+        elif "calendario" in message:
+            response = list_events()
+        elif "correo" in message:
+            response = read_email()
+        elif "normativa" in message:
+            response = get_laboral_guidelines()
+        elif "movilidad" in message:
+            response = recommend_chargers("ejemplo")
+        else:
+            response = "¡Hola! ¿En qué puedo ayudarte? Escribe 'ayuda' para ver las opciones disponibles."
+
+        # Enviar respuesta por WhatsApp
+        send_whatsapp_message(response)
+        return jsonify({"status": "success", "response": response})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)})
+
+if __name__ == "__main__":
+    app.run(debug=True)
+>>>>>>> 8227ead (Asistente completo y funcional)

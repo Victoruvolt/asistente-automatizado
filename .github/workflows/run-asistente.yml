@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 name: Ejecutar Asistente Automatizado
+=======
+name: Ejecutar asistente automatizado
+>>>>>>> 8227ead (Asistente completo y funcional)
 
 on:
   push:
@@ -6,6 +10,7 @@ on:
       - main
 
 jobs:
+<<<<<<< HEAD
   ejecutar-asistente:
     runs-on: ubuntu-latest
 
@@ -58,3 +63,34 @@ jobs:
       run: |
         echo "Ejecutando Flask con ngrok URL: $NGROK_URL"
         python app.py
+=======
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Configurar y ejecutar Ngrok
+        run: |
+          sudo apt update
+          sudo apt install -y wget
+          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          tar -xvzf ngrok-v3-stable-linux-amd64.tgz
+          sudo mv ngrok /usr/local/bin
+          ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          nohup ngrok http 5000 &
+
+      - name: Ejecutar Flask
+        run: python app.py
+>>>>>>> 8227ead (Asistente completo y funcional)
