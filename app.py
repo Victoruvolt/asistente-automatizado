@@ -1,127 +1,132 @@
-<<<<<<< HEAD
+# app.py - Asistente Integral
 import os
-from flask import Flask, request, jsonify
-from twilio.rest import Client
-from PyPDF2 import PdfReader
-from google.cloud import speech
 import openai
+import imaplib
+import email
+from flask import Flask, request, jsonify
+from PyPDF2 import PdfReader
+from twilio.twiml.messaging_response import MessagingResponse
+import requests  # Para manejar la conexión con el CRM Billage
 
-# Inicialización de la app Flask
+# Configuración de claves API y entorno
+openai.api_key = os.getenv("OPENAI_API_KEY")
+twilio_whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER")
+billage_api_key = os.getenv("BILLAGE_API_KEY")
+
+# Inicializar aplicación Flask
 app = Flask(__name__)
 
-# Variables de entorno
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-NGROK_URL = os.getenv("NGROK_URL")
+# Clase para manejar el CRM Billage
+class CRM:
+    def __init__(self, api_key):
+        self.api_url = "https://api.billage.com/v1/"  # Sustituye por la URL correcta de la API de Billage
+        self.headers = {"Authorization": f"Bearer {api_key}"}
 
-# Configuración de Twilio y OpenAI
-twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-openai.api_key = OPENAI_API_KEY
+    def crear_factura(self, cliente, concepto, cantidad):
+        try:
+            data = {
+                "cliente": cliente,
+                "concepto": concepto,
+                "cantidad": cantidad
+            }
+            response = requests.post(
+                f"{self.api_url}facturas", json=data, headers=self.headers
+            )
+            if response.status_code == 201:
+                return "Factura creada correctamente."
+            else:
+                return f"Error al crear factura: {response.text}"
+        except Exception as e:
+            return f"Error al crear factura: {str(e)}"
 
-# Función para enviar mensajes de WhatsApp
-def enviar_mensaje_whatsapp(destinatario, mensaje):
-    try:
-        twilio_client.messages.create(
-            from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
-            to=f"whatsapp:{destinatario}",
-            body=mensaje
-        )
-    except Exception as e:
-        print(f"Error enviando mensaje: {str(e)}")
+crm = CRM(billage_api_key)
 
-# Leer PDF
+# Función para leer contenido de un PDF
 def leer_pdf(ruta_pdf):
     try:
         reader = PdfReader(ruta_pdf)
-        texto = "".join(page.extract_text() for page in reader.pages)
+        texto = ""
+        for page in reader.pages:
+            texto += page.extract_text()
         return texto
     except Exception as e:
-        return f"Error leyendo el PDF: {str(e)}"
+        return f"Error al leer el PDF: {str(e)}"
 
-# Procesar audio
-def procesar_audio(ruta_audio):
-    client = speech.SpeechClient()
+# Función para gestionar correos
+def leer_correos():
     try:
-        with open(ruta_audio, "rb") as audio_file:
-            audio_content = audio_file.read()
+        imap_server = os.getenv("IMAP_SERVER")
+        imap_user = os.getenv("IMAP_USER")
+        imap_password = os.getenv("IMAP_PASSWORD")
 
-        audio = speech.RecognitionAudio(content=audio_content)
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=16000,
-            language_code="es-ES",
-        )
+        mail = imaplib.IMAP4_SSL(imap_server)
+        mail.login(imap_user, imap_password)
+        mail.select("inbox")
 
-        response = client.recognize(config=config, audio=audio)
-        return "\n".join(result.alternatives[0].transcript for result in response.results)
+        status, mensajes = mail.search(None, "ALL")
+        correo_ids = mensajes[0].split()
+
+        ultimos_correos = []
+        for correo_id in correo_ids[-5:]:
+            status, datos = mail.fetch(correo_id, "(RFC822)")
+            for respuesta in datos:
+                if isinstance(respuesta, tuple):
+                    mensaje = email.message_from_bytes(respuesta[1])
+                    ultimos_correos.append({
+                        "de": mensaje["from"],
+                        "asunto": mensaje["subject"]
+                    })
+        mail.logout()
+        return ultimos_correos
     except Exception as e:
-        return f"Error procesando audio: {str(e)}"
+        return f"Error al leer correos: {str(e)}"
 
 # Webhook de WhatsApp
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        mensaje = request.values.get("Body", "").lower()
-        remitente = request.values.get("From", "")
+        # Obtener mensaje entrante
+        mensaje_entrante = request.form.get("Body", "")
+        respuesta = procesar_mensaje(mensaje_entrante)
 
-        if "pdf" in mensaje:
-            respuesta = "Por favor envía un archivo PDF."
-        elif "audio" in mensaje:
-            respuesta = "Por favor envía un archivo de audio."
-        else:
-            respuesta = "No entendí tu mensaje. Intenta con 'pdf' o 'audio'."
-
-        enviar_mensaje_whatsapp(remitente, respuesta)
-        return "OK", 200
+        # Responder vía Twilio
+        respuesta_twilio = MessagingResponse()
+        respuesta_twilio.message(respuesta)
+        return str(respuesta_twilio)
     except Exception as e:
-        return f"Error en el webhook: {str(e)}", 500
+        return f"Error procesando la solicitud: {str(e)}", 500
 
-# Ruta de prueba
-@app.route("/prueba", methods=["GET"])
-def prueba():
-    return jsonify({"status": "funcionando correctamente"})
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
-=======
-from flask import Flask, request, jsonify
-from utils.whatsapp import send_whatsapp_message, process_whatsapp_message
-from utils.pdf_processing import read_pdf
-from utils.calendar import create_event, list_events
-from utils.email_manager import send_email, read_email
-from utils.normativa import get_laboral_guidelines
-from utils.mobility import recommend_chargers, vehicle_info
-import os
-
-app = Flask(__name__)
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
+# Procesar mensaje recibido
+def procesar_mensaje(mensaje):
     try:
-        data = request.json
-        message = data.get("Body", "").strip().lower()
+        if mensaje.lower().startswith("crear factura"):
+            _, cliente, concepto, cantidad = mensaje.split(",")
+            return crm.crear_factura(cliente.strip(), concepto.strip(), float(cantidad.strip()))
 
-        if "pdf" in message:
-            response = read_pdf("example.pdf")  # Cambia esto con la ruta del PDF
-        elif "calendario" in message:
-            response = list_events()
-        elif "correo" in message:
-            response = read_email()
-        elif "normativa" in message:
-            response = get_laboral_guidelines()
-        elif "movilidad" in message:
-            response = recommend_chargers("ejemplo")
+        elif mensaje.lower().startswith("leer correos"):
+            correos = leer_correos()
+            return "\n".join([f"De: {c['de']} | Asunto: {c['asunto']}" for c in correos])
+
+        elif mensaje.lower().startswith("leer pdf"):
+            _, ruta_pdf = mensaje.split(",")
+            return leer_pdf(ruta_pdf.strip())
+
         else:
-            response = "¡Hola! ¿En qué puedo ayudarte? Escribe 'ayuda' para ver las opciones disponibles."
-
-        # Enviar respuesta por WhatsApp
-        send_whatsapp_message(response)
-        return jsonify({"status": "success", "response": response})
+            # Interactuar con OpenAI
+            prompt = [
+                {"role": "system", "content": "Eres un asistente experto en normativa, vehículos eléctricos y convenios laborales en España."},
+                {"role": "user", "content": mensaje}
+            ]
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=prompt,
+                max_tokens=500,
+                temperature=0.7
+            )
+            return response["choices"][0]["message"]["content"]
     except Exception as e:
-        return jsonify({"status": "error", "error": str(e)})
+        return f"Error al procesar el mensaje: {str(e)}"
 
+# Punto de entrada
 if __name__ == "__main__":
-    app.run(debug=True)
->>>>>>> 8227ead (Asistente completo y funcional)
+    app.run(debug=True, host="0.0.0.0", port=5000)
