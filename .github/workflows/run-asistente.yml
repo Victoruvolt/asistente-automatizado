@@ -13,7 +13,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Configurar Python
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v4
       with:
         python-version: "3.9"
 
@@ -24,10 +24,12 @@ jobs:
 
     - name: Verificar secretos
       run: |
-        if [ -z "${{ secrets.TWILIO_WHATSAPP_NUMBER }}" ]; then echo "Falta TWILIO_WHATSAPP_NUMBER"; exit 1; fi
-        if [ -z "${{ secrets.TWILIO_ACCOUNT_SID }}" ]; then echo "Falta TWILIO_ACCOUNT_SID"; exit 1; fi
+        echo "Verificando claves..."
         if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then echo "Falta OPENAI_API_KEY"; exit 1; fi
         if [ -z "${{ secrets.NGROK_AUTH_TOKEN }}" ]; then echo "Falta NGROK_AUTH_TOKEN"; exit 1; fi
+        if [ -z "${{ secrets.TWILIO_ACCOUNT_SID }}" ]; then echo "Falta TWILIO_ACCOUNT_SID"; exit 1; fi
+        if [ -z "${{ secrets.TWILIO_AUTH_TOKEN }}" ]; then echo "Falta TWILIO_AUTH_TOKEN"; exit 1; fi
+        if [ -z "${{ secrets.TWILIO_WHATSAPP_NUMBER }}" ]; then echo "Falta TWILIO_WHATSAPP_NUMBER"; exit 1; fi
         echo "Todos los secretos están configurados."
 
     - name: Instalar y configurar ngrok
@@ -39,7 +41,8 @@ jobs:
       run: |
         nohup ngrok http 5000 &
         sleep 5
-        curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+        export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "URL pública de ngrok: $NGROK_URL"
 
     - name: Ejecutar Flask
       run: python app.py

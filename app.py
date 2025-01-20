@@ -45,20 +45,6 @@ def leer_pdf(ruta_pdf):
     except Exception as e:
         return f"Error al leer el PDF: {str(e)}"
 
-# Procesar audio
-def procesar_audio(ruta_audio):
-    client = speech.SpeechClient()
-    with open(ruta_audio, "rb") as audio_file:
-        audio_content = audio_file.read()
-    audio = speech.RecognitionAudio(content=audio_content)
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=16000,
-        language_code="es-ES"
-    )
-    response = client.recognize(config=config, audio=audio)
-    return " ".join(result.alternatives[0].transcript for result in response.results)
-
 # Webhook de WhatsApp
 @app.route("/webhook", methods=["POST"])
 def webhook():
