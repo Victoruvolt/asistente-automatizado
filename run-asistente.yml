@@ -20,6 +20,7 @@ jobs:
 
     - name: Instalar dependencias
       run: |
+        echo "Instalando dependencias..."
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
@@ -29,22 +30,29 @@ jobs:
         for secret in OPENAI_API_KEY NGROK_AUTH_TOKEN TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_WHATSAPP_NUMBER; do
           if [ -z "${{ secrets[$secret] }}" ]; then echo "Falta $secret"; exit 1; fi
         done
-        echo "Todos los secretos están configurados."
+        echo "Todos los secretos están configurados correctamente."
 
-    - name: Descargar y configurar ngrok
+    - name: Descargar e instalar ngrok
       run: |
-        echo "Descargando e instalando ngrok..."
+        echo "Descargando ngrok..."
         curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -o ngrok.tgz
         tar -xzf ngrok.tgz -C /usr/local/bin
-        ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        chmod +x /usr/local/bin/ngrok
+        ngrok version
 
-    - name: Iniciar ngrok
+    - name: Configurar ngrok y obtener URL pública
       run: |
         echo "Iniciando ngrok..."
-        nohup ngrok http 5000 &
+        ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        nohup ngrok http 5000 > ngrok.log &
         sleep 5
         export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
         echo "URL pública de ngrok: $NGROK_URL"
+        echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
 
     - name: Ejecutar Flask
-      run: python app.py
+      env:
+        NGROK_URL: ${{ env.NGROK_URL }}
+      run: |
+        echo "Ejecutando Flask con ngrok URL: $NGROK_URL"
+        python app.py

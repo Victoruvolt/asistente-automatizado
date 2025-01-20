@@ -1,6 +1,7 @@
-flask
+Flask
+PyPDF2
 twilio
-pypdf2
-google-cloud-speech
 openai
+requests
 python-dotenv
+google-cloud-speech
